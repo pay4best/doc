@@ -23,6 +23,8 @@ A DApp interacts with the Pay4Best wallet through [cross-window messaging](https
 
 The Pay4Best frame talks to its parent window through [MessageChannel](https://developer.mozilla.org/en-US/docs/Web/API/MessageChannel). The communication protocol is described as below.
 
+### Get the Address and the Public Key
+
 To get the cash address of the account managed by the Pay4Best frame, you should post a message containing `Pay4BestWalletReq: {GetAddr: true}` field. And the result will be posted back in the event's `data` field.
 
 ```javascript
@@ -41,6 +43,12 @@ To get the cash address of the account managed by the Pay4Best frame, you should
    }
 ```
 
+To get the public key of the account managed by the Pay4Best frame, you should post a message containing `Pay4BestWalletReq: {GetPublicKey: true}` field. And the result will be posted back in the event's `data` field.
+
+Just replace `GetAddr` with `GetPublicKey` in the above example and `event.data` will be the public key.
+
+### Get a signed transaction
+
 To make the Pay4Best frame sign a transaction, you should post a message containing `Pay4BestWalletReq: {UnsignedTx: ...}` field:
 
 
@@ -49,7 +57,7 @@ To make the Pay4Best frame sign a transaction, you should post a message contain
   pay4bestFrame.contentWindow.postMessage({
       Pay4BestWalletReq: {
           UnsignedTx: {
-              transaction: <the first argument of signUnsignedTransaction>
+              transaction: <the first argument of signUnsignedTransaction>,
               sourceOutputs: <the second argument of signUnsignedTransaction>
           }
       }
@@ -71,13 +79,39 @@ To make the Pay4Best frame sign a transaction, you should post a message contain
   }
 ```
 
-The `UnsignedTx` field provides the arguments used to call [`signUnsignedTransaction`](https://github.com/pay4best/pay4best.github.io/blob/main/utils/index.ts#L106).
+The `UnsignedTx` field provides the arguments used to call [`signUnsignedTransaction`](https://github.com/pay4best/pay4best.github.io/blob/main/utils/index.ts).
 
 The Pay4Best frame will post back two responses in sequence.
 
 The first response has a `ok` field and a `reqID` field. The `ok` field shows whether the window for signing confirmation has successfully popped out. If it's not, you should use the `reqID` to assemble a URL and use it to call `window.open` again, after asking the user to unblock all the pop-out windows from this DApp.
 
 The second response has a `refused` field and a `signedTx` field. The `refused` field shows whether the user refused to sign the transaction. If the user did not refuse, the `signedTx` is the return value from `signUnsignedTransaction`.
+
+### Get a signature for CheckSig
+
+Cashscript supports a data type named `sig`, which is a signature used by the `CheckSig` function. Generating such a signature is different from signing a transaction. So, to make the Pay4Best frame generate such a signature, you should post a message containing `Pay4BestWalletReq: {UnsignedTx: ...}` field like this:
+
+```
+  const channel = new MessageChannel();
+  pay4bestFrame.contentWindow.postMessage({
+      Pay4BestWalletReq: {
+          UnsignedTx: {
+              transaction: <the first argument of signTransactionForArg>,
+              sourceOutputs: <the second argument of signTransactionForArg>,
+              inputIndex: <the third argument of signTransactionForArg>,
+              bytecode: <the fourth argument of signTransactionForArg>
+          }
+      }
+  }, '*', [channel.port1]);
+```
+
+The `UnsignedTx` field provides the arguments used to call [`signTransactionForArg`](https://github.com/pay4best/pay4best.github.io/blob/main/utils/index.ts). Please note the whole transaction is needed to generate the signature that is used in the unlocking bytecode of just one input.
+
+The Pay4Best frame will post back two responses in sequence.
+
+The first response has a `ok` field and a `reqID` field. The `ok` field shows whether the window for generating signature has successfully popped out. If it's not, you should use the `reqID` to assemble a URL and use it to call `window.open` again, after asking the user to unblock all the pop-out windows from this DApp.
+
+The second response has a `refused` field and a `signedTx` field. The `refused` field shows whether the user refused to generate the signature. If the user did not refuse, the `signedTx` is the return value from `signTransactionForArg`.
 
 ## Working on mobile devices
 
@@ -105,4 +139,6 @@ The `transaction` and `sourceOutputs` are the first and second argumets of [`sig
 To get the EVM address and the derived cash address of Pay4Best, you call the URL `https://pay4.best/?generateUrl=<origin>`, where `origin` is your original DApp page which needs to know the addresses.
 
 Pay4Best will generate a URL string which points to the original DApp page with two additional parameters: `wallet`, which is the cash address derived by Pay4Best, and `evmAddress`, which is the EVM address used by Pay4Best.
+
+Currently, Pay4Best does not support generate signatures for CheckSig.
 
